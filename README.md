@@ -43,26 +43,47 @@ It performs the following:
 
 ## 執行示範 | Run the Demo
 ```bash
-make run
+sudo make run
 ```
-`make run` 會啟動 QEMU，並將序列埠輸出重導至終端機（使用 `-serial stdio` 與 `-display none`）。預期輸出如下：
+`make run` 會啟動 QEMU、接上既有的 TAP 介面（預設 `qemu-lan`）、並將序列埠輸出重導至終端機。啟動後會看到 demo 任務與網路任務定期送出 ARP probe：
 ```
 uC/OS-II x86 demo starting...
-Starting scheduler...
-[Task A] tick 0
-[Task B] heartbeat
+[NetTxTask] start
+[NetTxTask] tick
+[NET] Sending ARP probe...
+[NET] ARP probe sent to 192.168.1.103
 ...
 ```
 按下 `Ctrl+C` 以結束 QEMU。
 
-The `make run` target launches QEMU with the ISO, redirects the serial port to the terminal (`-serial stdio`, `-display none`), and shows output similar to the snippet above. Press `Ctrl+C` to terminate QEMU.
+The `make run` target now expects an existing TAP device (default `qemu-lan`), wires the emulated `e1000` NIC into it, and redirects serial output to the terminal. Press `Ctrl+C` when you want to stop QEMU.
 
-如需保留輸出，可改用：
+> **建立 TAP 介面 | Creating the TAP Interface**
+> ```bash
+> sudo ip tuntap add dev qemu-lan mode tap
+> sudo ip addr add 192.168.1.2/24 dev qemu-lan
+> sudo ip link set qemu-lan up
+> # 可視需求把 qemu-lan 納入 bridge，或直接與 host 溝通
+> ```
+> 若要使用不同的介面名稱或 MAC 位址，可在 `make run` 時帶入 `TAP_IFACE=<iface>`、`NETDEV_ID=<id>` 與 `NET_MAC=<mac>`。
+
+To keep the serial log while enabling networking, you can launch QEMU manually:
 ```bash
-qemu-system-i386 -cdrom build/ucosii.iso -serial file:serial.log -no-reboot -no-shutdown -display none
+sudo qemu-system-i386 -cdrom build/ucosii.iso -serial file:serial.log -no-reboot -no-shutdown -display none \
+    -netdev tap,id=network-lan,ifname=qemu-lan,script=no,downscript=no \
+    -device e1000,netdev=network-lan,mac=02:00:00:00:00:01
 ```
-這會把序列埠資料寫入 `serial.log`。
-To keep the trace, run QEMU manually as shown; it stores serial output in `serial.log`.
+This writes the serial output to `serial.log`.
+
+## 網路測試 | Network Test
+- uC/OS-II demo 內建靜態 IP `192.168.1.1/24`，MAC 預設 `02:00:00:00:00:01`。（目前驅動為 `e1000`，請在 QEMU 指令中維持相同網卡類型。）
+- 啟動後，從 host 端或 bridge 上的其他節點即可測試：
+  ```bash
+  ping 192.168.1.1
+  ```
+- 系統會處理 ARP 請求並回覆 ICMP Echo，連線成功會看到一般 ping 回應。
+
+The demo exposes a static IP `192.168.1.1/24` (default MAC `02:00:00:00:00:01`). The in-guest driver targets the emulated `e1000`, so keep the same device type when launching QEMU. Once the VM is up, issue `ping 192.168.1.1`; the stack replies to ARP and ICMP Echo packets, so you should see normal ping responses.
 
 ## 原始碼架構 | Repository Layout
 - `src/boot.asm` – Multiboot 入口，建立堆疊並跳往核心。
@@ -85,12 +106,14 @@ Explanation in English:
 - `OSIntEnter()`／`OSIntExit()` 保持巢狀中斷層級，必要時請求延遲切換。
 - `OSTaskCreate()` 透過 `OSTaskStkInit()` 建立 i386 相容堆疊框架，並在 `OSStartHighRdy()`/`OSCtxSw()` 以 `iretd` 還原。
 - 任務進入點位於 `OSTaskThunk()`，在呼叫任務前先執行 `sti` 以啟用中斷。
+- `net_init()` 啟動 `e1000` 網卡，`net_poll()` 周期性輪詢 ARP/ICMP，提供 192.168.1.1 的 ping 回覆。
 
 Scheduling & interrupt highlights:
 - The PIT runs at 100 Hz, driving `irq0` and `OSTimeTick()`.
 - `OSIntEnter()`/`OSIntExit()` maintain nesting depth and request deferred context switches when required.
 - `OSTaskCreate()` builds i386-compatible frames via `OSTaskStkInit()`; `OSStartHighRdy()`/`OSCtxSw()` restore them with `iretd`.
 - `OSTaskThunk()` enables interrupts with `sti` before invoking the task entry point.
+- `net_init()` sets up the emulated `e1000` NIC, and `net_poll()` services ARP requests plus ICMP echo (ping) for 192.168.1.1.
 
 ## 已知限制 | Known Limitations
 - 僅實作最基本的任務管理與延遲 API，未含郵件、訊號量與記憶體管理。

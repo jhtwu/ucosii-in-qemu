@@ -12,6 +12,9 @@ BUILD := build
 ISO_DIR := $(BUILD)/isodir
 TARGET := $(BUILD)/kernel.elf
 ISO := $(BUILD)/ucosii.iso
+TAP_IFACE ?= qemu-lan
+NET_MAC ?= 02:00:00:00:00:01
+NETDEV_ID ?= network-lan
 
 C_SRCS := $(shell find src -name '*.c')
 ASM_SRCS := $(shell find src -name '*.asm')
@@ -37,7 +40,9 @@ $(ISO): $(TARGET) grub.cfg
 	grub-mkrescue -o $@ $(ISO_DIR) >/dev/null 2>&1
 
 run: $(ISO)
-	qemu-system-i386 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown -display none
+	qemu-system-i386 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown -display none \
+	    -netdev tap,id=$(NETDEV_ID),ifname=$(TAP_IFACE),script=no,downscript=no \
+	    -device e1000,netdev=$(NETDEV_ID),mac=$(NET_MAC)
 
 clean:
 	rm -rf $(BUILD)
