@@ -125,25 +125,6 @@ Current caveats:
 - SMP and advanced debugging (e.g., GDB stub) are not implemented.
 - Scheduler uses a simple ready bitmask with a maximum of eight tasks.
 
-## 上傳至 GitHub | Publish to GitHub
-由於執行環境限制，我無法直接存取網際網路替您 push。可依下列步驟自行上傳：
-1. 在 GitHub 建立新倉庫（例如 `ucosii-x86-demo`）。
-2. 於專案資料夾初始化 Git 並提交：
-   ```bash
-   git init
-   git add .
-   git commit -m "Add uC/OS-II x86 QEMU demo"
-   ```
-3. 加入遠端並推送：
-   ```bash
-   git remote add origin https://github.com/<your-account>/<repo>.git
-   git branch -M main
-   git push -u origin main
-   ```
-若需使用 SSH 或 Access Token，請依個人環境調整遠端 URL。
-
-Due to the sandbox, I cannot push on your behalf. Follow the steps above to create a Git repository locally and push it to GitHub using either HTTPS or SSH credentials.
-
 ## 進一步延伸 | Next Steps
 - 增加更多 OS 特性（郵件、訊號量、事件旗標）。
 - 將序列輸出擴充為簡單命令介面，示範任務同步。
