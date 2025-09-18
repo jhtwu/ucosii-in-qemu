@@ -1,61 +1,56 @@
 #include "hw/serial.h"
-#include "hw/io.h"
+#include "hw/virtio_console.h"
 
-#define COM1_PORT 0x3F8
-
-static int serial_initialized = 0;
+#include <stddef.h>
 
 void serial_init(void) {
-    outb(COM1_PORT + 1, 0x00);    /* Disable all interrupts */
-    outb(COM1_PORT + 3, 0x80);    /* Enable DLAB */
-    outb(COM1_PORT + 0, 0x03);    /* Set baud rate divisor to 3 (38400 baud) */
-    outb(COM1_PORT + 1, 0x00);
-    outb(COM1_PORT + 3, 0x03);    /* 8 bits, no parity, one stop bit */
-    outb(COM1_PORT + 2, 0xC7);    /* Enable FIFO, clear them, with 14-byte threshold */
-    outb(COM1_PORT + 4, 0x0B);    /* IRQs enabled, RTS/DSR set */
-    serial_initialized = 1;
-}
-
-static int serial_is_transmit_empty(void) {
-    return inb(COM1_PORT + 5) & 0x20;
+    (void)virtio_console_init();
 }
 
 void serial_write_char(char c) {
-    if (!serial_initialized) {
-        serial_init();
-    }
-    while (!serial_is_transmit_empty()) {
-    }
-    outb(COM1_PORT, (uint8_t)c);
+    virtio_console_write(&c, 1u);
 }
 
 void serial_write(const char *s) {
-    while (*s) {
-        if (*s == '\n') {
-            serial_write_char('\r');
-        }
-        serial_write_char(*s++);
+    if (s == NULL) {
+        return;
+    }
+    size_t len = 0u;
+    while (s[len] != '\0') {
+        ++len;
+    }
+    if (len > 0u) {
+        virtio_console_write(s, len);
     }
 }
 
 void serial_write_hex(uint32_t value) {
-    const char digits[] = "0123456789ABCDEF";
-    serial_write("0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        serial_write_char(digits[(value >> i) & 0xF]);
+    static const char hex[] = "0123456789ABCDEF";
+    char buffer[10];
+    buffer[0] = '0';
+    buffer[1] = 'x';
+    for (int i = 0; i < 8; ++i) {
+        uint32_t shift = (uint32_t)(28 - i * 4);
+        buffer[2 + i] = hex[(value >> shift) & 0xFu];
     }
+    virtio_console_write(buffer, sizeof(buffer));
 }
 
 void serial_write_dec(uint32_t value) {
-    char buf[11];
-    int i = 10;
-    buf[i] = '\0';
-    if (value == 0) {
-        buf[--i] = '0';
+    char buffer[12];
+    int pos = 0;
+    if (value == 0u) {
+        buffer[pos++] = '0';
+    } else {
+        char tmp[10];
+        int t = 0;
+        while (value > 0u && t < 10) {
+            tmp[t++] = (char)('0' + (value % 10u));
+            value /= 10u;
+        }
+        while (t > 0) {
+            buffer[pos++] = tmp[--t];
+        }
     }
-    while (value > 0 && i > 0) {
-        buf[--i] = '0' + (value % 10);
-        value /= 10;
-    }
-    serial_write(&buf[i]);
+    virtio_console_write(buffer, (size_t)pos);
 }

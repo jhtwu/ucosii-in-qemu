@@ -214,10 +214,12 @@ static void net_frame_handler(const uint8_t *frame, uint16_t len) {
     }
 }
 
-void net_init(void) {
+int net_init(void) {
     if (virtio_net_init(NET_MAC) != 0) {
         serial_write("[NET] virtio init failed\n");
+        return -1;
     }
+    return 0;
 }
 
 void net_poll(void) {

@@ -1,48 +1,56 @@
-CC := gcc
-LD := ld
-NASM := nasm
-OBJCOPY := objcopy
+CROSS ?= $(shell if command -v aarch64-elf-gcc >/dev/null 2>&1; then echo aarch64-elf-; \
+    elif command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then echo aarch64-linux-gnu-; fi)
+ifeq ($(CROSS),)
+$(error Set CROSS to your AArch64 cross toolchain prefix)
+endif
 
-CFLAGS := -m32 -ffreestanding -fno-stack-protector -fno-pic -Wall -Wextra -std=gnu11
+CC := $(CROSS)gcc
+AR := $(CROSS)ar
+LD := $(CROSS)ld
+OBJCOPY := $(CROSS)objcopy
+
+CFLAGS := -march=armv8-a -ffreestanding -fno-stack-protector -fno-pic -Wall -Wextra -std=gnu11 -O2
 CFLAGS += -Iinclude
-LDFLAGS := -m elf_i386 -T linker.ld -nostdlib
-NASMFLAGS := -f elf32
+ASFLAGS := $(CFLAGS)
+LDFLAGS := -nostdlib -static -T linker.ld
 
 BUILD := build
-ISO_DIR := $(BUILD)/isodir
-TARGET := $(BUILD)/kernel.elf
-ISO := $(BUILD)/ucosii.iso
+TARGET_ELF := $(BUILD)/kernel.elf
+TARGET_BIN := $(BUILD)/kernel8.img
+
 TAP_IFACE ?= qemu-lan
 NET_MAC ?= 02:00:00:00:00:01
 NETDEV_ID ?= network-lan
 
 C_SRCS := $(shell find src -name '*.c')
-ASM_SRCS := $(shell find src -name '*.asm')
-OBJS := $(C_SRCS:%.c=$(BUILD)/%.o) $(ASM_SRCS:%.asm=$(BUILD)/%.o)
+S_SRCS := $(shell find src -name '*.S')
+OBJS := $(C_SRCS:%.c=$(BUILD)/%.o) $(S_SRCS:%.S=$(BUILD)/%.o)
 
-all: $(ISO)
+all: $(TARGET_BIN)
 
 $(BUILD)/%.o: %.c | $(BUILD)/src
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: %.asm | $(BUILD)/src
+$(BUILD)/%.o: %.S | $(BUILD)/src
 	@mkdir -p $(dir $@)
-	$(NASM) $(NASMFLAGS) $< -o $@
+	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(TARGET): linker.ld $(OBJS)
-	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+$(TARGET_ELF): linker.ld $(OBJS)
+	$(CC) -o $@ $(OBJS) $(LDFLAGS)
 
-$(ISO): $(TARGET) grub.cfg
-	@mkdir -p $(ISO_DIR)/boot/grub
-	cp $(TARGET) $(ISO_DIR)/boot/kernel.elf
-	cp grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
-	grub-mkrescue -o $@ $(ISO_DIR) >/dev/null 2>&1
+$(TARGET_BIN): $(TARGET_ELF)
+	$(OBJCOPY) -O binary $< $@
 
-run: $(ISO)
-	qemu-system-i386 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown -display none \
+run: $(TARGET_BIN)
+	qemu-system-aarch64 -M virt -cpu cortex-a53 -nographic \
+	    -kernel $(TARGET_BIN) \
+	    -serial none \
+	    -chardev stdio,id=virtiocon0 \
+	    -device virtio-serial-device,id=virtio-serial0 \
+	    -device virtconsole,chardev=virtiocon0,id=virtio-console0,bus=virtio-serial0.0 \
 	    -netdev tap,id=$(NETDEV_ID),ifname=$(TAP_IFACE),script=no,downscript=no \
-	    -device virtio-net-pci,disable-modern=on,netdev=$(NETDEV_ID),mac=$(NET_MAC)
+	    -device virtio-net-device,netdev=$(NETDEV_ID),mac=$(NET_MAC)
 
 clean:
 	rm -rf $(BUILD)

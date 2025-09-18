@@ -1,10 +1,17 @@
-#include "ucos_ii.h"
+#include "hw/gic.h"
+#include "hw/timer.h"
 #include "os_core.h"
-#include "hw/pic.h"
+#include "ucos_ii.h"
 
-void irq0_handler_c(void) {
-    OSIntEnter();
-    OSTimeTick();
-    pic_send_eoi(0);
-    OSIntExit();
+void irq_handler(void) {
+    uint32_t ack = gic_acknowledge();
+
+    if (ack == GIC_IRQ_VIRTUAL_TIMER) {
+        timer_ack();
+        OSIntEnter();
+        OSTimeTick();
+        OSIntExit();
+    }
+
+    gic_end_irq(ack);
 }

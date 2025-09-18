@@ -8,8 +8,8 @@ typedef uint16_t INT16U;
 typedef uint32_t INT32U;
 typedef int16_t  INT16S;
 typedef int32_t  INT32S;
-typedef uint32_t OS_STK;
-typedef uint32_t OS_CPU_SR;
+typedef uint64_t OS_STK;
+typedef uint64_t OS_CPU_SR;
 
 typedef void (*OS_TASK_PTR)(void *pdata);
 

@@ -1,32 +1,29 @@
-ENTRY(start)
+ENTRY(_start)
 
 SECTIONS
 {
-    . = 1M;
+    . = 0x40000000;
 
-    .multiboot :
-    {
-        *(.multiboot)
-    }
-
-    .text ALIGN(4) :
-    {
+    .text : ALIGN(4) {
+        *(.text.boot)
         *(.text*)
     }
 
-    .rodata ALIGN(4) :
-    {
+    .rodata : ALIGN(8) {
         *(.rodata*)
     }
 
-    .data ALIGN(4) :
-    {
+    .data : ALIGN(8) {
         *(.data*)
     }
 
-    .bss ALIGN(4) :
-    {
-        *(COMMON)
+    .bss (NOLOAD) : ALIGN(8) {
+        __bss_start = .;
         *(.bss*)
+        *(COMMON)
+        __bss_end = .;
     }
+
+    . = ALIGN(16);
+    __stack_top = . + 0x00040000; /* 256 KiB stack reserved */
 }

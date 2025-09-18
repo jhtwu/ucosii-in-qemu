@@ -1,6 +1,7 @@
 #include "ucos_ii.h"
 #include "os_core.h"
 #include "os_cpu.h"
+#include "hw/cpu.h"
 #include <stddef.h>
 
 #define OS_IDLE_STK_SIZE 256
@@ -28,12 +29,12 @@ static void OS_SchedNew(void);
 
 void OSTaskReturn(void) {
     for (;;) {
-        __asm__ volatile ("hlt");
+        cpu_wait_for_interrupt();
     }
 }
 
 void OSTaskThunk(OS_TASK_PTR task, void *pdata) {
-    __asm__ volatile ("sti");
+    cpu_enable_irq();
     task(pdata);
     OSTaskReturn();
 }
@@ -134,7 +135,7 @@ void OSStart(void) {
 static void OSIdleTask(void *pdata) {
     (void)pdata;
     for (;;) {
-        __asm__ volatile ("hlt");
+        cpu_wait_for_interrupt();
     }
 }
 

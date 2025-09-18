@@ -10,6 +10,5 @@ void OSStartHighRdy(void);
 OS_STK *OSTaskStkInit(OS_TASK_PTR task, void *pdata, OS_STK *ptos);
 OS_CPU_SR OS_CPU_SaveSR(void);
 void OS_CPU_RestoreSR(OS_CPU_SR sr);
-uint32_t OS_CPU_GetCS(void);
 
 #endif /* OS_CPU_H */
