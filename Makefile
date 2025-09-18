@@ -42,7 +42,7 @@ $(ISO): $(TARGET) grub.cfg
 run: $(ISO)
 	qemu-system-i386 -cdrom $(ISO) -serial stdio -no-reboot -no-shutdown -display none \
 	    -netdev tap,id=$(NETDEV_ID),ifname=$(TAP_IFACE),script=no,downscript=no \
-	    -device e1000,netdev=$(NETDEV_ID),mac=$(NET_MAC)
+	    -device virtio-net-pci,disable-modern=on,netdev=$(NETDEV_ID),mac=$(NET_MAC)
 
 clean:
 	rm -rf $(BUILD)

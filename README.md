@@ -56,7 +56,7 @@ uC/OS-II x86 demo starting...
 ```
 按下 `Ctrl+C` 以結束 QEMU。
 
-The `make run` target now expects an existing TAP device (default `qemu-lan`), wires the emulated `e1000` NIC into it, and redirects serial output to the terminal. Press `Ctrl+C` when you want to stop QEMU.
+The `make run` target now expects an existing TAP device (default `qemu-lan`), wires the emulated `virtio-net` NIC into it, and redirects serial output to the terminal. Press `Ctrl+C` when you want to stop QEMU.
 
 > **建立 TAP 介面 | Creating the TAP Interface**
 > ```bash
@@ -71,19 +71,29 @@ To keep the serial log while enabling networking, you can launch QEMU manually:
 ```bash
 sudo qemu-system-i386 -cdrom build/ucosii.iso -serial file:serial.log -no-reboot -no-shutdown -display none \
     -netdev tap,id=network-lan,ifname=qemu-lan,script=no,downscript=no \
-    -device e1000,netdev=network-lan,mac=02:00:00:00:00:01
+    -device virtio-net-pci,disable-modern=on,netdev=network-lan,mac=02:00:00:00:00:01
 ```
 This writes the serial output to `serial.log`.
 
 ## 網路測試 | Network Test
-- uC/OS-II demo 內建靜態 IP `192.168.1.1/24`，MAC 預設 `02:00:00:00:00:01`。（目前驅動為 `e1000`，請在 QEMU 指令中維持相同網卡類型。）
+- uC/OS-II demo 內建靜態 IP `192.168.1.1/24`，MAC 預設 `02:00:00:00:00:01`。（目前驅動為 `virtio-net`，請在 QEMU 指令中維持相同網卡類型。）
 - 啟動後，從 host 端或 bridge 上的其他節點即可測試：
   ```bash
   ping 192.168.1.1
   ```
 - 系統會處理 ARP 請求並回覆 ICMP Echo，連線成功會看到一般 ping 回應。
 
-The demo exposes a static IP `192.168.1.1/24` (default MAC `02:00:00:00:00:01`). The in-guest driver targets the emulated `e1000`, so keep the same device type when launching QEMU. Once the VM is up, issue `ping 192.168.1.1`; the stack replies to ARP and ICMP Echo packets, so you should see normal ping responses.
+The demo exposes a static IP `192.168.1.1/24` (default MAC `02:00:00:00:00:01`). The in-guest driver targets the emulated `virtio-net`, so keep the same device type when launching QEMU. Once the VM is up, issue `ping 192.168.1.1`; the stack replies to ARP and ICMP Echo packets, so you should see normal ping responses.
+
+## Virtio-Net 驅動說明 | Virtio-Net Driver
+本版本將原本的 e1000 驅動改寫為 legacy 模式的 virtio-net，透過 PCI I/O 空間完成特徵協商，配置 RX(隊列0)/TX(隊列1) 環形佇列並預載緩衝區。驅動維持靜態 MAC (`02:00:00:00:00:01`)，並在每次輪詢時回收完成的傳送描述元、重新掛載接收描述元。
+This release replaces the former e1000 driver with a legacy-mode virtio-net implementation. The driver negotiates features via PCI I/O registers, wires queue 0/1 as RX/TX rings, pre-populates buffers, and recycles descriptors during polling.
+
+為了保持示範程式簡潔，驅動採用固定大小的 2 KiB 緩衝區與 256 個描述元上限，足以支援 ARP 與 ICMP Echo 測試。若需擴充，可調整 `VIRTQ_MAX` 或改用 DMA 友善的記憶體配置器。
+To keep the demo compact the driver ships with 2 KiB buffers and up to 256 descriptors, which is plenty for ARP/ICMP echo. For advanced workloads, grow `VIRTQ_MAX` or switch to an allocator designed for DMA.
+
+實測建議同時啟動 `sudo timeout 40s tcpdump -i qemu-lan -n -vv -l` 與 `sudo make run`，即可在主機上觀察 virtio 送出的 ARP/ICMP 封包。若使用不同的 TAP 名稱，請改以 `make run TAP_IFACE=<iface>`。
+During verification, run `sudo timeout 40s tcpdump -i qemu-lan -n -vv -l` alongside `sudo make run` to observe ARP/ICMP frames emitted through virtio on the host. Use `make run TAP_IFACE=<iface>` when testing with a custom TAP device name.
 
 ## 原始碼架構 | Repository Layout
 - `src/boot.asm` – Multiboot 入口，建立堆疊並跳往核心。
@@ -106,14 +116,14 @@ Explanation in English:
 - `OSIntEnter()`／`OSIntExit()` 保持巢狀中斷層級，必要時請求延遲切換。
 - `OSTaskCreate()` 透過 `OSTaskStkInit()` 建立 i386 相容堆疊框架，並在 `OSStartHighRdy()`/`OSCtxSw()` 以 `iretd` 還原。
 - 任務進入點位於 `OSTaskThunk()`，在呼叫任務前先執行 `sti` 以啟用中斷。
-- `net_init()` 啟動 `e1000` 網卡，`net_poll()` 周期性輪詢 ARP/ICMP，提供 192.168.1.1 的 ping 回覆。
+- `net_init()` 啟動 `virtio-net` 網卡，`net_poll()` 周期性輪詢 ARP/ICMP，提供 192.168.1.1 的 ping 回覆。
 
 Scheduling & interrupt highlights:
 - The PIT runs at 100 Hz, driving `irq0` and `OSTimeTick()`.
 - `OSIntEnter()`/`OSIntExit()` maintain nesting depth and request deferred context switches when required.
 - `OSTaskCreate()` builds i386-compatible frames via `OSTaskStkInit()`; `OSStartHighRdy()`/`OSCtxSw()` restore them with `iretd`.
 - `OSTaskThunk()` enables interrupts with `sti` before invoking the task entry point.
-- `net_init()` sets up the emulated `e1000` NIC, and `net_poll()` services ARP requests plus ICMP echo (ping) for 192.168.1.1.
+- `net_init()` sets up the emulated `virtio-net` NIC, and `net_poll()` services ARP requests plus ICMP echo (ping) for 192.168.1.1.
 
 ## 已知限制 | Known Limitations
 - 僅實作最基本的任務管理與延遲 API，未含郵件、訊號量與記憶體管理。

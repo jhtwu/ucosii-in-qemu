@@ -1,5 +1,5 @@
 #include "net/net.h"
-#include "hw/e1000.h"
+#include "hw/virtio_net.h"
 #include "hw/serial.h"
 #include "ucos_ii.h"
 
@@ -112,7 +112,7 @@ static void net_handle_arp(const struct eth_hdr *eth, const struct arp_pkt *arp)
         reply.arp.tpa[i] = arp->spa[i];
     }
 
-    if (e1000_send((uint8_t *)&reply, sizeof(reply)) == 0) {
+    if (virtio_net_send((uint8_t *)&reply, sizeof(reply)) == 0) {
         serial_write("[NET] ARP reply sent\n");
     } else {
         serial_write("[NET] ARP reply failed\n");
@@ -171,7 +171,7 @@ static void net_handle_icmp(const struct eth_hdr *eth, const struct ip_hdr *ip, 
     eth_reply->type = swap16(ETH_TYPE_IP);
 
     uint16_t total_len = (uint16_t)(sizeof(struct eth_hdr) + sizeof(struct ip_hdr) + icmp_total);
-    if (e1000_send(tx_buffer, total_len) == 0) {
+    if (virtio_net_send(tx_buffer, total_len) == 0) {
         serial_write("[NET] ICMP echo reply sent\n");
     } else {
         serial_write("[NET] ICMP echo reply failed\n");
@@ -215,13 +215,13 @@ static void net_frame_handler(const uint8_t *frame, uint16_t len) {
 }
 
 void net_init(void) {
-    if (e1000_init(NET_MAC) != 0) {
-        serial_write("[NET] e1000 init failed\n");
+    if (virtio_net_init(NET_MAC) != 0) {
+        serial_write("[NET] virtio init failed\n");
     }
 }
 
 void net_poll(void) {
-    e1000_poll(net_frame_handler);
+    virtio_net_poll(net_frame_handler);
 }
 
 void net_send_arp_probe(const uint8_t ip[4]) {
@@ -250,7 +250,7 @@ void net_send_arp_probe(const uint8_t ip[4]) {
         req.arp.tpa[i] = ip[i];
     }
 
-    if (e1000_send((uint8_t *)&req, sizeof(req)) == 0) {
+    if (virtio_net_send((uint8_t *)&req, sizeof(req)) == 0) {
         serial_write("[NET] ARP probe sent\n");
     } else {
         serial_write("[NET] ARP probe failed\n");
