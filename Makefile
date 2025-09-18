@@ -43,10 +43,11 @@ $(TARGET_BIN): $(TARGET_ELF)
 	$(OBJCOPY) -O binary $< $@
 
 run: $(TARGET_BIN)
-	qemu-system-aarch64 -M virt -cpu cortex-a53 -nographic \
+	qemu-system-aarch64 -M virt -cpu cortex-a53 -display none \
 	    -kernel $(TARGET_BIN) \
+	    -monitor none \
 	    -serial none \
-	    -chardev stdio,id=virtiocon0 \
+	    -chardev stdio,id=virtiocon0,signal=off \
 	    -device virtio-serial-device,id=virtio-serial0 \
 	    -device virtconsole,chardev=virtiocon0,id=virtio-console0,bus=virtio-serial0.0 \
 	    -netdev tap,id=$(NETDEV_ID),ifname=$(TAP_IFACE),script=no,downscript=no \

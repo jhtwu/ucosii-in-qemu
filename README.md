@@ -39,7 +39,7 @@ The rule compiles every C/assembly translation unit for AArch64, links them into
 sudo make run
 ```
 此指令會：
-1. 啟動 `qemu-system-aarch64 -M virt -cpu cortex-a53 -nographic`。
+1. 啟動 `qemu-system-aarch64 -M virt -cpu cortex-a53 -display none -monitor none -serial none`。
 2. 將 `virtio-console` 連到目前的終端裝置，作為 RTOS 的序列輸出。
 3. 透過 TAP 介面（預設 `qemu-lan`）接上 virtio-net 裝置。
 4. 於主控台顯示類似以下訊息：
@@ -66,10 +66,11 @@ The `make run` target launches QEMU in headless mode, wires the guest virtio-con
 ### 手動啟動 | Manual Launch
 若想保留主控台輸出或客製化參數，可參考：
 ```bash
-sudo qemu-system-aarch64 -M virt -cpu cortex-a53 -nographic \
+sudo qemu-system-aarch64 -M virt -cpu cortex-a53 -display none \
     -kernel build/kernel8.img \
+    -monitor none \
     -serial none \
-    -chardev stdio,id=virtiocon0 \
+    -chardev stdio,id=virtiocon0,signal=off \
     -device virtio-serial-device,id=virtio-serial0 \
     -device virtconsole,chardev=virtiocon0,id=virtio-console0,bus=virtio-serial0.0 \
     -netdev tap,id=network-lan,ifname=qemu-lan,script=no,downscript=no \
